@@ -1,0 +1,1098 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Neon Arcade Slot Machine</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <script>
+    // Configure Tailwind with Inter font and custom neon arcade keyframes/utilities
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+          },
+          keyframes: {
+            pulseGlow: {
+              '0%, 100%': { boxShadow: '0 0 18px rgba(34, 211, 238, 0.35), inset 0 0 12px rgba(217, 70, 239, 0.2)' },
+              '50%': { boxShadow: '0 0 32px rgba(217, 70, 239, 0.55), inset 0 0 18px rgba(34, 211, 238, 0.3)' },
+            },
+            winPop: {
+              '0%': { transform: 'scale(0.92)' },
+              '50%': { transform: 'scale(1.08)' },
+              '100%': { transform: 'scale(1)' },
+            },
+            floatBadge: {
+              '0%, 100%': { transform: 'translateY(0px)' },
+              '50%': { transform: 'translateY(-3px)' },
+            }
+          },
+          animation: {
+            pulseGlow: 'pulseGlow 3s ease-in-out infinite',
+            winPop: 'winPop 0.45s cubic-bezier(0.22, 1, 0.36, 1)',
+            floatBadge: 'floatBadge 2.4s ease-in-out infinite',
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    /* Custom arcade lighting, reel strip motion, and payline laser styling */
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background-color: #070812;
+      background-image:
+        radial-gradient(circle at 18% 15%, rgba(217, 70, 239, 0.16), transparent 42%),
+        radial-gradient(circle at 82% 20%, rgba(34, 211, 238, 0.16), transparent 45%),
+        radial-gradient(circle at 50% 88%, rgba(250, 204, 21, 0.08), transparent 50%);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    .arcade-cabinet {
+      background: linear-gradient(165deg, rgba(22, 26, 48, 0.94), rgba(11, 13, 26, 0.98));
+      border: 1px solid rgba(148, 163, 184, 0.18);
+    }
+
+    .reel-viewport {
+      position: relative;
+      overflow: hidden;
+      background: linear-gradient(180deg, #060711 0%, #11152b 22%, #171c38 50%, #11152b 78%, #060711 100%);
+      box-shadow: inset 0 14px 24px rgba(0, 0, 0, 0.78), inset 0 -14px 24px rgba(0, 0, 0, 0.78);
+    }
+
+    /* Top & bottom cylindrical reel depth shading */
+    .reel-viewport::before,
+    .reel-viewport::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 28%;
+      pointer-events: none;
+      z-index: 15;
+    }
+    .reel-viewport::before {
+      top: 0;
+      background: linear-gradient(to bottom, rgba(6, 7, 17, 0.92), rgba(6, 7, 17, 0));
+    }
+    .reel-viewport::after {
+      bottom: 0;
+      background: linear-gradient(to top, rgba(6, 7, 17, 0.92), rgba(6, 7, 17, 0));
+    }
+
+    .reel-strip {
+      display: flex;
+      flex-direction: column;
+      will-change: transform;
+    }
+
+    .symbol-cell {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+      position: relative;
+    }
+
+    .symbol-glyph {
+      line-height: 1;
+      filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.55));
+      transition: transform 0.25s ease, filter 0.25s ease;
+    }
+
+    .reel-spinning .symbol-glyph {
+      filter: blur(1.2px) drop-shadow(0 0 10px rgba(34, 211, 238, 0.45));
+    }
+
+    .winning-symbol {
+      animation: winPop 0.5s ease-in-out infinite alternate;
+      background: radial-gradient(circle, rgba(250, 204, 21, 0.22) 0%, rgba(217, 70, 239, 0.12) 55%, transparent 75%);
+    }
+
+    .winning-symbol .symbol-glyph {
+      transform: scale(1.12);
+      filter: drop-shadow(0 0 16px rgba(250, 204, 21, 0.85));
+    }
+
+    .payline-beam {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 50%;
+      height: 3px;
+      transform: translateY(-50%);
+      z-index: 20;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.25s ease;
+      background: linear-gradient(90deg, transparent, #22d3ee 18%, #facc15 50%, #e879f9 82%, transparent);
+      box-shadow: 0 0 14px #facc15, 0 0 26px #e879f9;
+    }
+
+    .payline-beam.active {
+      opacity: 0.95;
+    }
+
+    .spin-btn {
+      background: linear-gradient(135deg, #06b6d4 0%, #8b5cf6 52%, #ec4899 100%);
+      box-shadow: 0 8px 28px -4px rgba(139, 92, 246, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+      transition: transform 0.14s ease, filter 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+    }
+
+    .spin-btn:hover:not(:disabled) {
+      filter: brightness(1.1);
+      box-shadow: 0 10px 34px -2px rgba(236, 72, 153, 0.72), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+    }
+
+    .spin-btn:active:not(:disabled) {
+      transform: scale(0.97) translateY(2px);
+    }
+
+    .spin-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .bulb-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 9999px;
+      transition: transform 0.25s ease, opacity 0.25s ease;
+    }
+  </style>
+</head>
+<body class="text-slate-100 antialiased selection:bg-fuchsia-500 selection:text-white">
+  <div class="min-h-screen w-full flex flex-col items-center justify-center px-3 py-5 sm:px-6 sm:py-8">
+    <!-- Main Arcade Cabinet Container -->
+    <main class="arcade-cabinet w-full max-w-xl rounded-3xl p-4 sm:p-7 shadow-2xl animate-pulseGlow relative">
+      <!-- Top Marquee Header & Controls -->
+      <header class="flex items-center justify-between gap-2 pb-4 border-b border-slate-800/90">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div class="h-10 w-10 sm:h-11 sm:w-11 rounded-2xl bg-gradient-to-br from-cyan-400 via-fuchsia-500 to-amber-400 flex items-center justify-center text-xl sm:text-2xl shadow-lg shrink-0" aria-hidden="true">
+            🎰
+          </div>
+          <div class="min-w-0">
+            <h1 class="text-lg sm:text-2xl font-black tracking-tight bg-gradient-to-r from-cyan-300 via-fuchsia-300 to-amber-300 bg-clip-text text-transparent truncate">
+              NEON SPIN 777
+            </h1>
+            <p class="text-xs text-slate-400 truncate">3-Reel Arcade • Center Payline</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 shrink-0">
+          <!-- Sound Mute Toggle -->
+          <button
+            id="soundToggleBtn"
+            type="button"
+            aria-label="Toggle sound effects"
+            aria-pressed="false"
+            class="flex items-center gap-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700/90 active:scale-95 border border-slate-700/80 px-3 py-2 text-xs sm:text-sm font-semibold text-slate-200 transition cursor-pointer"
+          >
+            <span id="soundIcon" aria-hidden="true">🔊</span>
+            <span id="soundLabel" class="hidden xs:inline sm:inline">Sound On</span>
+          </button>
+
+          <!-- Paytable Modal Trigger -->
+          <button
+            id="paytableToggleBtn"
+            type="button"
+            aria-expanded="false"
+            aria-controls="paytablePanel"
+            class="rounded-xl bg-slate-800/90 hover:bg-slate-700/90 active:scale-95 border border-slate-700/80 px-3 py-2 text-xs sm:text-sm font-semibold text-cyan-300 transition cursor-pointer"
+          >
+            Payouts
+          </button>
+        </div>
+      </header>
+
+      <!-- Collapsible Paytable Drawer -->
+      <section
+        id="paytablePanel"
+        aria-label="Symbol Payout Table"
+        class="hidden mt-4 rounded-2xl bg-slate-900/95 border border-cyan-500/25 p-3.5 sm:p-4 text-xs sm:text-sm"
+      >
+        <div class="flex items-center justify-between mb-2.5">
+          <h2 class="font-bold text-cyan-300 uppercase tracking-wider text-xs">Payout Multipliers (Center Line)</h2>
+          <span class="text-[11px] text-slate-400">3-of-a-kind &amp; 2-of-a-kind</span>
+        </div>
+        <div id="paytableGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-2"></div>
+        <p class="mt-2.5 text-[11px] text-slate-400 leading-relaxed">
+          Tip: Any two matching symbols on the center payline award a mini-payout; three matching symbols trigger big multipliers up to <span class="text-amber-300 font-semibold">50x</span>!
+        </p>
+      </section>
+
+      <!-- Decorative Arcade Bulb Strip -->
+      <div id="bulbRow" class="flex items-center justify-between px-2 pt-3.5 pb-2" aria-hidden="true"></div>
+
+      <!-- Coin Balance & Last Win Bar -->
+      <section aria-label="Balance and Win Summary" class="grid grid-cols-2 gap-3 mb-4">
+        <div class="rounded-2xl bg-slate-900/90 border border-slate-800 px-3.5 py-2.5 sm:px-4 sm:py-3 flex flex-col justify-between">
+          <span class="text-[11px] uppercase tracking-wider font-semibold text-slate-400">Coin Balance</span>
+          <div class="flex items-center justify-between gap-2 mt-0.5">
+            <div class="flex items-center gap-1.5">
+              <span class="text-base sm:text-lg" aria-hidden="true">🪙</span>
+              <span id="balanceDisplay" class="text-lg sm:text-2xl font-extrabold text-amber-300 tabular-nums">1,000</span>
+            </div>
+            <button
+              id="topUpBtn"
+              type="button"
+              title="Claim free coins or reset balance"
+              class="rounded-lg bg-amber-400/15 hover:bg-amber-400/25 active:scale-95 border border-amber-400/40 px-2 py-1 text-[11px] font-bold text-amber-300 transition cursor-pointer"
+            >
+              +1,000 Free
+            </button>
+          </div>
+        </div>
+
+        <div class="rounded-2xl bg-slate-900/90 border border-slate-800 px-3.5 py-2.5 sm:px-4 sm:py-3 flex flex-col justify-between">
+          <span class="text-[11px] uppercase tracking-wider font-semibold text-slate-400">Last Win</span>
+          <div class="flex items-center gap-1.5 mt-0.5">
+            <span class="text-base sm:text-lg" aria-hidden="true">✨</span>
+            <span id="lastWinDisplay" class="text-lg sm:text-2xl font-extrabold text-emerald-400 tabular-nums">0</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3-Reel Slot Window -->
+      <section aria-label="Slot Reels" class="relative rounded-2xl p-2.5 sm:p-3.5 bg-gradient-to-b from-cyan-500/20 via-fuchsia-500/20 to-amber-400/20 border border-fuchsia-400/30 mb-4">
+        <!-- Left & Right Payline Indicators -->
+        <div class="hidden sm:flex absolute -left-2.5 top-1/2 -translate-y-1/2 z-30 h-8 w-8 rounded-full bg-amber-400 text-slate-950 font-black text-xs items-center justify-center shadow-lg border-2 border-slate-950" aria-hidden="true">
+          ▶
+        </div>
+        <div class="hidden sm:flex absolute -right-2.5 top-1/2 -translate-y-1/2 z-30 h-8 w-8 rounded-full bg-amber-400 text-slate-950 font-black text-xs items-center justify-center shadow-lg border-2 border-slate-950" aria-hidden="true">
+          ◀
+        </div>
+
+        <!-- Center Laser Payline -->
+        <div id="paylineBeam" class="payline-beam"></div>
+
+        <div class="grid grid-cols-3 gap-2 sm:gap-3">
+          <!-- Reel 1 -->
+          <div id="reelViewport0" class="reel-viewport rounded-xl border border-slate-700/70">
+            <div id="reelStrip0" class="reel-strip"></div>
+          </div>
+
+          <!-- Reel 2 -->
+          <div id="reelViewport1" class="reel-viewport rounded-xl border border-slate-700/70">
+            <div id="reelStrip1" class="reel-strip"></div>
+          </div>
+
+          <!-- Reel 3 -->
+          <div id="reelViewport2" class="reel-viewport rounded-xl border border-slate-700/70">
+            <div id="reelStrip2" class="reel-strip"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Status / Win Banner -->
+      <div
+        id="statusBanner"
+        role="status"
+        aria-live="polite"
+        class="mb-4 rounded-2xl bg-slate-900/95 border border-slate-800 px-4 py-3 text-center min-h-[54px] flex flex-col items-center justify-center transition-colors duration-300"
+      >
+        <p id="statusTitle" class="text-sm sm:text-base font-bold text-cyan-300">
+          Ready to spin! Match symbols on the center line.
+        </p>
+        <p id="statusSubtitle" class="text-xs text-slate-400 mt-0.5">
+          Press SPIN or Spacebar to try your luck.
+        </p>
+      </div>
+
+      <!-- Bet Selector & Spin Controls -->
+      <section aria-label="Bet and Spin Controls" class="space-y-3">
+        <div class="rounded-2xl bg-slate-900/85 border border-slate-800 p-3 sm:p-3.5">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Bet Per Spin</span>
+            <span id="betHint" class="text-xs text-fuchsia-300 font-semibold">Max Bet: 250</span>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <button
+              id="decreaseBetBtn"
+              type="button"
+              aria-label="Decrease bet"
+              class="h-11 w-11 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 border border-slate-700 text-lg font-extrabold text-slate-100 flex items-center justify-center transition cursor-pointer shrink-0"
+            >
+              −
+            </button>
+
+            <div class="flex-1 grid grid-cols-4 gap-1.5 sm:gap-2">
+              <button type="button" data-bet="10" class="bet-preset-btn rounded-xl py-2.5 text-xs sm:text-sm font-bold border transition cursor-pointer">10</button>
+              <button type="button" data-bet="25" class="bet-preset-btn rounded-xl py-2.5 text-xs sm:text-sm font-bold border transition cursor-pointer">25</button>
+              <button type="button" data-bet="50" class="bet-preset-btn rounded-xl py-2.5 text-xs sm:text-sm font-bold border transition cursor-pointer">50</button>
+              <button type="button" data-bet="100" class="bet-preset-btn rounded-xl py-2.5 text-xs sm:text-sm font-bold border transition cursor-pointer">100</button>
+            </div>
+
+            <button
+              id="increaseBetBtn"
+              type="button"
+              aria-label="Increase bet"
+              class="h-11 w-11 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 border border-slate-700 text-lg font-extrabold text-slate-100 flex items-center justify-center transition cursor-pointer shrink-0"
+            >
+              +
+            </button>
+          </div>
+        </div>
+
+        <!-- Primary Spin Button -->
+        <button
+          id="spinBtn"
+          type="button"
+          class="spin-btn w-full rounded-2xl py-4 px-6 text-lg sm:text-xl font-black tracking-wider uppercase text-white flex items-center justify-center gap-3 cursor-pointer"
+        >
+          <span>SPIN</span>
+          <span id="spinBetBadge" class="rounded-full bg-black/30 px-3 py-0.5 text-xs sm:text-sm font-bold border border-white/20">
+            Bet 25 🪙
+          </span>
+        </button>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    /**
+     * =========================================================================
+     * NEON SPIN 777 - SELF-CONTAINED SLOT MACHINE ENGINE
+     * =========================================================================
+     * Architecture:
+     * 1. SYMBOLS & PAYOUTS: Weighted symbol pool (fruits, gems, stars, sevens)
+     *    with 3-of-a-kind and 2-of-a-kind center-payline payout multipliers.
+     * 2. SOUND ENGINE (Web Audio API): Zero-dependency synthesized clicks, reel
+     *    ticks, stop thuds, win chimes, and jackpot fanfare with mute support.
+     * 3. REEL PHYSICS & ANIMATION: Multi-cycle vertical strip scrolling with
+     *    staggered stop times, ease-out deceleration, and responsive cell sizing.
+     * 4. STATE & UI CONTROLLER: Tracks coin balance, bet selection, spin lock,
+     *    free coin top-up/reset, paytable drawer, and keyboard/touch support.
+     * =========================================================================
+     */
+
+    // --- 1. Symbol Definitions & Weighted Probability Pool ---
+    const SYMBOLS = [
+      { id: 'seven',   glyph: '7️⃣', label: 'Lucky Seven', threeMult: 50, twoMult: 5,   weight: 4 },
+      { id: 'diamond', glyph: '💎', label: 'Diamond',     threeMult: 25, twoMult: 3,   weight: 7 },
+      { id: 'star',    glyph: '⭐', label: 'Super Star',  threeMult: 15, twoMult: 2,   weight: 10 },
+      { id: 'melon',   glyph: '🍉', label: 'Watermelon',  threeMult: 10, twoMult: 1.5, weight: 14 },
+      { id: 'grape',   glyph: '🍇', label: 'Grape',       threeMult: 8,  twoMult: 1.2, weight: 17 },
+      { id: 'lemon',   glyph: '🍋', label: 'Lemon',       threeMult: 6,  twoMult: 1,   weight: 22 },
+      { id: 'cherry',  glyph: '🍒', label: 'Cherry',      threeMult: 5,  twoMult: 1,   weight: 26 },
+    ];
+
+    const SYMBOL_MAP = Object.fromEntries(SYMBOLS.map((s) => [s.id, s]));
+
+    // Build weighted pool for realistic arcade odds while keeping wins exciting
+    const WEIGHTED_POOL = [];
+    for (const sym of SYMBOLS) {
+      for (let i = 0; i < sym.weight; i++) {
+        WEIGHTED_POOL.push(sym);
+      }
+    }
+
+    const BET_STEPS = [10, 25, 50, 100, 250];
+    const INITIAL_COINS = 1000;
+    const TOP_UP_AMOUNT = 1000;
+    const VISIBLE_ROWS = 3; // Top, Center (payline), Bottom
+
+    // --- 2. Web Audio API Sound Synthesizer ---
+    class ArcadeSoundEngine {
+      constructor() {
+        this.ctx = null;
+        this.muted = false;
+      }
+
+      ensureContext() {
+        if (this.muted) return null;
+        try {
+          if (!this.ctx) {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (AudioCtx) {
+              this.ctx = new AudioCtx();
+            }
+          }
+          if (this.ctx && this.ctx.state === 'suspended') {
+            this.ctx.resume();
+          }
+          return this.ctx;
+        } catch (err) {
+          return null;
+        }
+      }
+
+      setMuted(muteState) {
+        this.muted = Boolean(muteState);
+      }
+
+      playTone({ freq = 440, endFreq = null, duration = 0.08, type = 'sine', gain = 0.12, delay = 0 }) {
+        const ctx = this.ensureContext();
+        if (!ctx) return;
+
+        try {
+          const now = ctx.currentTime + delay;
+          const osc = ctx.createOscillator();
+          const gainNode = ctx.createGain();
+
+          osc.type = type;
+          osc.frequency.setValueAtTime(freq, now);
+          if (endFreq !== null) {
+            osc.frequency.exponentialRampToValueAtTime(Math.max(20, endFreq), now + duration);
+          }
+
+          gainNode.gain.setValueAtTime(0.0001, now);
+          gainNode.gain.exponentialRampToValueAtTime(Math.max(0.0001, gain), now + 0.012);
+          gainNode.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+          osc.connect(gainNode);
+          gainNode.connect(ctx.destination);
+
+          osc.start(now);
+          osc.stop(now + duration + 0.02);
+        } catch (err) {
+          // Ignore audio scheduling errors on restricted devices
+        }
+      }
+
+      playClick() {
+        this.playTone({ freq: 680, endFreq: 520, duration: 0.045, type: 'triangle', gain: 0.08 });
+      }
+
+      playSpinStart() {
+        this.playTone({ freq: 240, endFreq: 580, duration: 0.16, type: 'sawtooth', gain: 0.09 });
+      }
+
+      playReelTick(reelIndex) {
+        const baseFreq = 320 + reelIndex * 55;
+        this.playTone({ freq: baseFreq, endFreq: baseFreq * 0.85, duration: 0.03, type: 'triangle', gain: 0.045 });
+      }
+
+      playReelStop(reelIndex) {
+        const pitch = 150 + reelIndex * 35;
+        this.playTone({ freq: pitch, endFreq: 75, duration: 0.11, type: 'sine', gain: 0.16 });
+      }
+
+      playWin(isBigWin = false) {
+        const notes = isBigWin
+          ? [523.25, 659.25, 783.99, 1046.5, 1318.5]
+          : [523.25, 659.25, 783.99, 1046.5];
+        notes.forEach((freq, idx) => {
+          this.playTone({
+            freq,
+            endFreq: freq * 1.02,
+            duration: isBigWin ? 0.22 : 0.15,
+            type: isBigWin ? 'triangle' : 'sine',
+            gain: 0.13,
+            delay: idx * 0.085,
+          });
+        });
+      }
+
+      playTopUp() {
+        [440, 554.37, 659.25, 880].forEach((freq, idx) => {
+          this.playTone({
+            freq,
+            duration: 0.12,
+            type: 'sine',
+            gain: 0.1,
+            delay: idx * 0.06,
+          });
+        });
+      }
+    }
+
+    // --- 3. Application State ---
+    const sound = new ArcadeSoundEngine();
+
+    const state = {
+      balance: INITIAL_COINS,
+      bet: 25,
+      lastWin: 0,
+      isSpinning: false,
+      cellHeight: 88,
+      // Each reel holds 3 visible symbols [top, center, bottom]
+      reels: [
+        [SYMBOL_MAP.cherry, SYMBOL_MAP.seven, SYMBOL_MAP.lemon],
+        [SYMBOL_MAP.star,   SYMBOL_MAP.seven, SYMBOL_MAP.grape],
+        [SYMBOL_MAP.melon,  SYMBOL_MAP.seven, SYMBOL_MAP.diamond],
+      ],
+      activeAnimationFrames: [],
+      tickTimers: [],
+      bulbTimer: null,
+    };
+
+    // --- 4. DOM References ---
+    const dom = {
+      balanceDisplay: document.getElementById('balanceDisplay'),
+      lastWinDisplay: document.getElementById('lastWinDisplay'),
+      topUpBtn: document.getElementById('topUpBtn'),
+      spinBtn: document.getElementById('spinBtn'),
+      spinBetBadge: document.getElementById('spinBetBadge'),
+      decreaseBetBtn: document.getElementById('decreaseBetBtn'),
+      increaseBetBtn: document.getElementById('increaseBetBtn'),
+      betPresetBtns: Array.from(document.querySelectorAll('.bet-preset-btn')),
+      betHint: document.getElementById('betHint'),
+      statusBanner: document.getElementById('statusBanner'),
+      statusTitle: document.getElementById('statusTitle'),
+      statusSubtitle: document.getElementById('statusSubtitle'),
+      paylineBeam: document.getElementById('paylineBeam'),
+      soundToggleBtn: document.getElementById('soundToggleBtn'),
+      soundIcon: document.getElementById('soundIcon'),
+      soundLabel: document.getElementById('soundLabel'),
+      paytableToggleBtn: document.getElementById('paytableToggleBtn'),
+      paytablePanel: document.getElementById('paytablePanel'),
+      paytableGrid: document.getElementById('paytableGrid'),
+      bulbRow: document.getElementById('bulbRow'),
+      reelViewports: [
+        document.getElementById('reelViewport0'),
+        document.getElementById('reelViewport1'),
+        document.getElementById('reelViewport2'),
+      ],
+      reelStrips: [
+        document.getElementById('reelStrip0'),
+        document.getElementById('reelStrip1'),
+        document.getElementById('reelStrip2'),
+      ],
+    };
+
+    // --- 5. Helper Functions ---
+    function formatCoins(num) {
+      return Math.floor(num).toLocaleString('en-US');
+    }
+
+    function pickRandomSymbol() {
+      const index = Math.floor(Math.random() * WEIGHTED_POOL.length);
+      return WEIGHTED_POOL[index];
+    }
+
+    function generateColumn() {
+      return [pickRandomSymbol(), pickRandomSymbol(), pickRandomSymbol()];
+    }
+
+    function computeCellHeight() {
+      const width = window.innerWidth;
+      if (width < 400) return 72;
+      if (width < 640) return 82;
+      return 96;
+    }
+
+    function applyViewportDimensions() {
+      state.cellHeight = computeCellHeight();
+      const viewportHeight = state.cellHeight * VISIBLE_ROWS;
+      const fontSize = Math.round(state.cellHeight * 0.54);
+
+      dom.reelViewports.forEach((vp) => {
+        vp.style.height = `${viewportHeight}px`;
+      });
+
+      document.querySelectorAll('.symbol-cell').forEach((cell) => {
+        cell.style.height = `${state.cellHeight}px`;
+      });
+
+      document.querySelectorAll('.symbol-glyph').forEach((glyph) => {
+        glyph.style.fontSize = `${fontSize}px`;
+      });
+    }
+
+    function createSymbolCell(symbol, highlightCenter = false) {
+      const cell = document.createElement('div');
+      cell.className = 'symbol-cell';
+      cell.style.height = `${state.cellHeight}px`;
+      if (highlightCenter) {
+        cell.classList.add('winning-symbol', 'is-center-win');
+      }
+
+      const glyph = document.createElement('span');
+      glyph.className = 'symbol-glyph';
+      glyph.textContent = symbol.glyph;
+      glyph.style.fontSize = `${Math.round(state.cellHeight * 0.54)}px`;
+      glyph.setAttribute('aria-label', symbol.label);
+
+      cell.appendChild(glyph);
+      return cell;
+    }
+
+    function renderStaticReels(winningReelIndices = []) {
+      dom.reelStrips.forEach((strip, reelIdx) => {
+        strip.style.transition = 'none';
+        strip.style.transform = 'translateY(0px)';
+        strip.innerHTML = '';
+
+        const col = state.reels[reelIdx];
+        col.forEach((sym, rowIdx) => {
+          const isWinningCell = rowIdx === 1 && winningReelIndices.includes(reelIdx);
+          strip.appendChild(createSymbolCell(sym, isWinningCell));
+        });
+      });
+    }
+
+    function clearWinningHighlights() {
+      dom.paylineBeam.classList.remove('active');
+      document.querySelectorAll('.winning-symbol').forEach((el) => {
+        el.classList.remove('winning-symbol', 'is-center-win');
+      });
+    }
+
+    function setStatus(title, subtitle, tone = 'normal') {
+      dom.statusTitle.textContent = title;
+      dom.statusSubtitle.textContent = subtitle;
+
+      dom.statusBanner.classList.remove(
+        'border-slate-800',
+        'border-emerald-400/60',
+        'border-amber-400/70',
+        'border-rose-500/50',
+        'bg-emerald-950/35',
+        'bg-amber-950/35',
+        'bg-rose-950/30',
+        'bg-slate-900/95'
+      );
+      dom.statusTitle.classList.remove('text-cyan-300', 'text-emerald-300', 'text-amber-300', 'text-rose-300');
+
+      if (tone === 'jackpot') {
+        dom.statusBanner.classList.add('border-amber-400/70', 'bg-amber-950/35', 'animate-winPop');
+        dom.statusTitle.classList.add('text-amber-300');
+        setTimeout(() => dom.statusBanner.classList.remove('animate-winPop'), 500);
+      } else if (tone === 'win') {
+        dom.statusBanner.classList.add('border-emerald-400/60', 'bg-emerald-950/35', 'animate-winPop');
+        dom.statusTitle.classList.add('text-emerald-300');
+        setTimeout(() => dom.statusBanner.classList.remove('animate-winPop'), 500);
+      } else if (tone === 'warn') {
+        dom.statusBanner.classList.add('border-rose-500/50', 'bg-rose-950/30');
+        dom.statusTitle.classList.add('text-rose-300');
+      } else {
+        dom.statusBanner.classList.add('border-slate-800', 'bg-slate-900/95');
+        dom.statusTitle.classList.add('text-cyan-300');
+      }
+    }
+
+    function updateControlsUI() {
+      dom.balanceDisplay.textContent = formatCoins(state.balance);
+      dom.lastWinDisplay.textContent = formatCoins(state.lastWin);
+      dom.spinBetBadge.textContent = `Bet ${formatCoins(state.bet)} 🪙`;
+
+      // Clamp bet if balance is lower than current bet
+      const maxAffordableStep = BET_STEPS.filter((b) => b <= state.balance);
+      if (maxAffordableStep.length > 0 && state.bet > state.balance) {
+        state.bet = maxAffordableStep[maxAffordableStep.length - 1];
+      } else if (state.balance > 0 && state.bet > state.balance) {
+        state.bet = state.balance;
+      }
+
+      const currentIdx = BET_STEPS.indexOf(state.bet);
+      dom.decreaseBetBtn.disabled = state.isSpinning || currentIdx <= 0;
+      dom.increaseBetBtn.disabled =
+        state.isSpinning ||
+        currentIdx === -1 ||
+        currentIdx >= BET_STEPS.length - 1 ||
+        BET_STEPS[currentIdx + 1] > state.balance;
+
+      dom.betPresetBtns.forEach((btn) => {
+        const presetVal = Number(btn.dataset.bet);
+        const isSelected = state.bet === presetVal;
+        const canAfford = presetVal <= state.balance;
+
+        btn.disabled = state.isSpinning || !canAfford;
+        btn.className = 'bet-preset-btn rounded-xl py-2.5 text-xs sm:text-sm font-bold border transition cursor-pointer ';
+
+        if (isSelected) {
+          btn.className += 'bg-fuchsia-500/25 border-fuchsia-400 text-fuchsia-200 shadow-sm';
+        } else if (!canAfford) {
+          btn.className += 'bg-slate-900/50 border-slate-800 text-slate-600 cursor-not-allowed';
+        } else {
+          btn.className += 'bg-slate-800/80 hover:bg-slate-700/80 border-slate-700 text-slate-200';
+        }
+      });
+
+      const canSpin = !state.isSpinning && state.balance >= state.bet && state.bet > 0;
+      dom.spinBtn.disabled = !canSpin;
+
+      // Highlight free top-up button when coins run low
+      if (state.balance < state.bet || state.balance < 50) {
+        dom.topUpBtn.classList.add('animate-floatBadge', 'ring-2', 'ring-amber-300/60');
+      } else {
+        dom.topUpBtn.classList.remove('animate-floatBadge', 'ring-2', 'ring-amber-300/60');
+      }
+    }
+
+    // --- 6. Payout Calculation ---
+    function evaluateCenterLine(finalReels, betAmount) {
+      // Center row is index 1 across all 3 reels
+      const [s0, s1, s2] = [finalReels[0][1], finalReels[1][1], finalReels[2][1]];
+
+      // 3 of a kind
+      if (s0.id === s1.id && s1.id === s2.id) {
+        const payout = Math.round(betAmount * s0.threeMult);
+        return {
+          win: payout,
+          multiplier: s0.threeMult,
+          matchType: 'TRIPLE',
+          symbol: s0,
+          winningReels: [0, 1, 2],
+        };
+      }
+
+      // 2 of a kind (adjacent or outer pair on center line)
+      if (s0.id === s1.id) {
+        const payout = Math.max(1, Math.round(betAmount * s0.twoMult));
+        return {
+          win: payout,
+          multiplier: s0.twoMult,
+          matchType: 'PAIR',
+          symbol: s0,
+          winningReels: [0, 1],
+        };
+      }
+
+      if (s1.id === s2.id) {
+        const payout = Math.max(1, Math.round(betAmount * s1.twoMult));
+        return {
+          win: payout,
+          multiplier: s1.twoMult,
+          matchType: 'PAIR',
+          symbol: s1,
+          winningReels: [1, 2],
+        };
+      }
+
+      if (s0.id === s2.id) {
+        const payout = Math.max(1, Math.round(betAmount * s0.twoMult));
+        return {
+          win: payout,
+          multiplier: s0.twoMult,
+          matchType: 'SPLIT PAIR',
+          symbol: s0,
+          winningReels: [0, 2],
+        };
+      }
+
+      return {
+        win: 0,
+        multiplier: 0,
+        matchType: null,
+        symbol: null,
+        winningReels: [],
+      };
+    }
+
+    // --- 7. Reel Spin Animation Engine ---
+    function animateSingleReel(reelIndex, targetColumn, durationMs) {
+      return new Promise((resolve) => {
+        const strip = dom.reelStrips[reelIndex];
+        const viewport = dom.reelViewports[reelIndex];
+        const cellH = state.cellHeight;
+
+        // Build vertical strip: current visible 3 rows + random scrolling symbols + final 3 rows
+        const scrollCount = 12 + reelIndex * 5;
+        const stripSymbols = [
+          ...state.reels[reelIndex],
+          ...Array.from({ length: scrollCount }, () => pickRandomSymbol()),
+          ...targetColumn,
+        ];
+
+        strip.innerHTML = '';
+        stripSymbols.forEach((sym) => {
+          strip.appendChild(createSymbolCell(sym, false));
+        });
+
+        const totalTravel = (stripSymbols.length - VISIBLE_ROWS) * cellH;
+        const startTime = performance.now();
+        let lastTickStep = -1;
+
+        viewport.classList.add('reel-spinning');
+        strip.style.transform = 'translateY(0px)';
+
+        // Quartic ease-out for crisp mechanical deceleration
+        const easeOutQuart = (t) => 1 - Math.pow(1 - t, 4);
+
+        function step(now) {
+          const elapsed = now - startTime;
+          const progress = Math.min(1, elapsed / durationMs);
+          const eased = easeOutQuart(progress);
+          const currentY = -eased * totalTravel;
+
+          strip.style.transform = `translate3d(0, ${currentY.toFixed(2)}px, 0)`;
+
+          const currentStep = Math.floor(Math.abs(currentY) / cellH);
+          if (currentStep !== lastTickStep && progress < 0.92) {
+            lastTickStep = currentStep;
+            sound.playReelTick(reelIndex);
+          }
+
+          if (progress < 1) {
+            const rafId = requestAnimationFrame(step);
+            state.activeAnimationFrames[reelIndex] = rafId;
+          } else {
+            viewport.classList.remove('reel-spinning');
+            state.reels[reelIndex] = targetColumn;
+            renderStaticReels();
+            sound.playReelStop(reelIndex);
+            resolve();
+          }
+        }
+
+        const rafId = requestAnimationFrame(step);
+        state.activeAnimationFrames[reelIndex] = rafId;
+      });
+    }
+
+    async function handleSpin() {
+      if (state.isSpinning) return;
+
+      if (state.balance < state.bet) {
+        setStatus(
+          'Not enough coins for this bet!',
+          'Lower your bet or tap "+1,000 Free" to top up your coin balance.',
+          'warn'
+        );
+        updateControlsUI();
+        return;
+      }
+
+      state.isSpinning = true;
+      state.lastWin = 0;
+      clearWinningHighlights();
+
+      // Deduct bet upfront
+      state.balance -= state.bet;
+      updateControlsUI();
+      sound.playSpinStart();
+
+      setStatus('Spinning the reels...', `Wagered ${formatCoins(state.bet)} coins on center payline`, 'normal');
+
+      // Pre-determine target columns for all 3 reels
+      const nextReels = [generateColumn(), generateColumn(), generateColumn()];
+
+      // Staggered stop durations for arcade suspense
+      const durations = [950, 1320, 1700];
+
+      await Promise.all(
+        nextReels.map((col, idx) => animateSingleReel(idx, col, durations[idx]))
+      );
+
+      // Evaluate outcome
+      const outcome = evaluateCenterLine(state.reels, state.bet);
+      state.isSpinning = false;
+
+      if (outcome.win > 0) {
+        state.balance += outcome.win;
+        state.lastWin = outcome.win;
+        renderStaticReels(outcome.winningReels);
+        dom.paylineBeam.classList.add('active');
+
+        const isBigWin = outcome.multiplier >= 15 || outcome.win >= state.bet * 10;
+        sound.playWin(isBigWin);
+
+        if (isBigWin) {
+          setStatus(
+            `MEGA WIN! +${formatCoins(outcome.win)} COINS!`,
+            `${outcome.matchType} ${outcome.symbol.glyph} ${outcome.symbol.label} (${outcome.multiplier}x payout)`,
+            'jackpot'
+          );
+        } else {
+          setStatus(
+            `NICE WIN! +${formatCoins(outcome.win)} COINS!`,
+            `${outcome.matchType} ${outcome.symbol.glyph} ${outcome.symbol.label} (${outcome.multiplier}x payout)`,
+            'win'
+          );
+        }
+      } else {
+        if (state.balance === 0) {
+          setStatus(
+            'Out of coins!',
+            'Tap "+1,000 Free" above to claim a free coin refill and keep playing.',
+            'warn'
+          );
+        } else {
+          setStatus(
+            'No match on center line',
+            'Tap SPIN again for another shot!',
+            'normal'
+          );
+        }
+      }
+
+      updateControlsUI();
+    }
+
+    // --- 8. Bet, Top-Up, Sound, Paytable & Marquee Bulbs ---
+    function adjustBet(delta) {
+      if (state.isSpinning) return;
+      sound.playClick();
+
+      const currentIdx = BET_STEPS.indexOf(state.bet);
+      if (delta > 0) {
+        const nextVal = currentIdx === -1 ? BET_STEPS[0] : BET_STEPS[Math.min(BET_STEPS.length - 1, currentIdx + 1)];
+        if (nextVal <= state.balance) {
+          state.bet = nextVal;
+        }
+      } else if (delta < 0) {
+        if (currentIdx > 0) {
+          state.bet = BET_STEPS[currentIdx - 1];
+        } else {
+          const affordableBelow = BET_STEPS.filter((b) => b < state.bet && b <= state.balance);
+          if (affordableBelow.length > 0) {
+            state.bet = affordableBelow[affordableBelow.length - 1];
+          }
+        }
+      }
+
+      updateControlsUI();
+    }
+
+    function selectBetPreset(amount) {
+      if (state.isSpinning || amount > state.balance) return;
+      sound.playClick();
+      state.bet = amount;
+      updateControlsUI();
+    }
+
+    function handleTopUp() {
+      if (state.isSpinning) return;
+      sound.playTopUp();
+
+      if (state.balance < TOP_UP_AMOUNT) {
+        state.balance += TOP_UP_AMOUNT;
+        setStatus(
+          `+${formatCoins(TOP_UP_AMOUNT)} Free Coins Added!`,
+          'Your coin balance has been topped up. Good luck!',
+          'win'
+        );
+      } else {
+        // Reset back to starter balance if player already has plenty
+        state.balance = INITIAL_COINS;
+        state.bet = 25;
+        setStatus(
+          `Balance Reset to ${formatCoins(INITIAL_COINS)} Coins`,
+          'Fresh arcade stack ready for action.',
+          'normal'
+        );
+      }
+
+      updateControlsUI();
+    }
+
+    function toggleSound() {
+      const nextMuted = !sound.muted;
+      sound.setMuted(nextMuted);
+      dom.soundToggleBtn.setAttribute('aria-pressed', String(nextMuted));
+
+      if (nextMuted) {
+        dom.soundIcon.textContent = '🔇';
+        dom.soundLabel.textContent = 'Muted';
+      } else {
+        dom.soundIcon.textContent = '🔊';
+        dom.soundLabel.textContent = 'Sound On';
+        sound.playClick();
+      }
+    }
+
+    function togglePaytable() {
+      sound.playClick();
+      const isHidden = dom.paytablePanel.classList.contains('hidden');
+      dom.paytablePanel.classList.toggle('hidden', !isHidden);
+      dom.paytableToggleBtn.setAttribute('aria-expanded', String(isHidden));
+    }
+
+    function renderPaytable() {
+      dom.paytableGrid.innerHTML = '';
+      SYMBOLS.forEach((sym) => {
+        const card = document.createElement('div');
+        card.className =
+          'flex items-center justify-between rounded-xl bg-slate-800/80 border border-slate-700/70 px-2.5 py-2';
+        card.innerHTML = `
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="text-lg shrink-0" aria-hidden="true">${sym.glyph}</span>
+            <span class="font-semibold text-slate-200 truncate">${sym.label}</span>
+          </div>
+          <div class="text-right shrink-0 ml-2">
+            <span class="font-extrabold text-amber-300">${sym.threeMult}x</span>
+            <span class="text-[10px] text-slate-400 block">${sym.twoMult}x pair</span>
+          </div>
+        `;
+        dom.paytableGrid.appendChild(card);
+      });
+    }
+
+    function initMarqueeBulbs() {
+      const bulbCount = 13;
+      const palette = ['#22d3ee', '#e879f9', '#facc15', '#34d399'];
+      dom.bulbRow.innerHTML = '';
+
+      const bulbs = [];
+      for (let i = 0; i < bulbCount; i++) {
+        const dot = document.createElement('span');
+        dot.className = 'bulb-dot';
+        const color = palette[i % palette.length];
+        dot.style.backgroundColor = color;
+        dot.style.boxShadow = `0 0 8px ${color}`;
+        dom.bulbRow.appendChild(dot);
+        bulbs.push(dot);
+      }
+
+      let phase = 0;
+      state.bulbTimer = setInterval(() => {
+        phase = (phase + 1) % bulbs.length;
+        bulbs.forEach((dot, idx) => {
+          const active = state.isSpinning
+            ? (idx + phase) % 2 === 0
+            : (idx + phase) % 3 === 0;
+          dot.style.opacity = active ? '1' : '0.32';
+          dot.style.transform = active ? 'scale(1.2)' : 'scale(0.95)';
+        });
+      }, 220);
+    }
+
+    // --- 9. Event Listeners & Initialization ---
+    function bindEvents() {
+      dom.spinBtn.addEventListener('click', handleSpin);
+      dom.decreaseBetBtn.addEventListener('click', () => adjustBet(-1));
+      dom.increaseBetBtn.addEventListener('click', () => adjustBet(1));
+      dom.topUpBtn.addEventListener('click', handleTopUp);
+      dom.soundToggleBtn.addEventListener('click', toggleSound);
+      dom.paytableToggleBtn.addEventListener('click', togglePaytable);
+
+      dom.betPresetBtns.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          selectBetPreset(Number(btn.dataset.bet));
+        });
+      });
+
+      // Spacebar shortcut for desktop convenience
+      window.addEventListener('keydown', (e) => {
+        if (e.code === 'Space' && !e.repeat) {
+          const activeTag = document.activeElement?.tagName;
+          if (activeTag !== 'BUTTON') {
+            e.preventDefault();
+            handleSpin();
+          }
+        }
+      });
+
+      // Responsive resize handler
+      window.addEventListener('resize', () => {
+        applyViewportDimensions();
+        if (!state.isSpinning) {
+          const highlighted = Array.from(document.querySelectorAll('.is-center-win')).map((_, i) => i);
+          renderStaticReels(highlighted.length ? highlighted : []);
+        }
+      });
+    }
+
+    function initGame() {
+      renderPaytable();
+      initMarqueeBulbs();
+      applyViewportDimensions();
+      renderStaticReels();
+      updateControlsUI();
+      bindEvents();
+    }
+
+    initGame();
+  </script>
+</body>
+</html>
